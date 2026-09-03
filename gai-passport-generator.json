@@ -1,0 +1,986 @@
+{
+  "name": "生成AIパスポート３_修正版_エラー対策",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        224
+      ],
+      "id": "a5736e01-d02f-4645-896a-b4dc2d2f98d0",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// この実行での「新たに追加した件数」カウンターを0にリセット\nconst staticData = $getWorkflowStaticData('global');\nstaticData.addedCount = 0;\nstaticData.categoryCounts = {};\nstaticData.categoryKeywords = {};\nstaticData.questionTypeCounts = {};\nstaticData.totalCount = 0;\nstaticData.syllabus = [];\nstaticData.keywordCountMap = {};\nstaticData.loopCount = 0; // 【追加】無限ループ対策用の周回カウンタもリセット\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        224
+      ],
+      "id": "23d1d51c-c1fb-4435-8201-cfe4554d6d8e",
+      "name": "Init Counter"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.1-flash-lite",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.1-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=以下の指定に従い、{{ $('Select Targets').first().json.exam_name }}試験の模擬問題を【5問】作成してください。\n\n【出題条件】\n- 以下の5つの指定順序・出題形式・中分類に厳密に従って1問ずつ作成してください。\n{{ $json.target_list_text }}\n- 出題内容および難易度は、{{ $('Select Targets').first().json.exam_name }}の本試験で出題されるレベル・傾向に厳密に合わせてください。上位区分の試験(例: 基本情報技術者試験、応用情報技術者試験)で問われるような、詳細なアルゴリズム実装、複雑な計算問題、深い数学的知識、専門的な技術詳細を要求する問題は絶対に出題しないこと。\n- 正答以外の選択肢(ダミー選択肢)は、単なるデタラメや無関係な単語ではなく、「受験者が勘違いしやすい類似用語」や「よくある誤解」を元に説得力のある内容を作成してください。\n- 各選択肢(A〜D)の長さや記述表現のトーンを統一し、選択肢の長さだけで正解が推測できないようにしてください。\n- 問題文は一義的に解釈でき、複数の正解が存在するなどの曖昧さがないように作成してください。\n- 解説文中で、特定の生成AIサービス名・モデル名(個別のバージョン名、特定企業の製品名)を断定的な現在形で言及しないこと。固有名詞は「代表的な生成AIサービス」「大規模言語モデル(LLM)」のような一般的な表現に置き換えること。シラバス・公式テキストに明記された名称のみ使用可とし、自分の知識で補完しないこと。\n- 法律・コンプライアンス・契約に関する問題の場合、実際の法律・判例・ガイドライン上「必ず違法/有罪」と言い切れない場合(個別事情による、グレーゾーン、行政指導止まり等)は、断定表現(「〜は違法です」)ではなく「〜に該当する可能性があります」など正確なニュアンスの表現を用いること。ただし、明確に法律で禁止されている事項まで曖昧にぼかす必要はない。\n- 原則として肯定形の問題(適切なものを選ばせる形式)を作成すること。ただし出題形式(question_type)の定義上、否定形が前提とされる場合はその形式に従うこと。否定問を作成する場合、問題文の否定語は必ず全角の【】で強調すること(例:【不適切な】ものはどれか)。正解は問題文の問いかけ(適切/不適切のどちら向きか)に対する正解であることを、選択肢作成時・解説作成時ともに再確認すること。\n- 強調や引用の文字には半角ダブルクォート(\")を使わず、全角の「」を使用してください(ただし、否定問の否定語強調のみ上記の通り【】を使用すること)。\n\n【出題形式の定義】\n{{ $json.question_type_definitions_text }}\n\n【大分類の許容値一覧】\n{{ $json.category_major_list_text }}\n\n【出力形式の厳守】\n出力は必ず [ で始まり ] で終わる JSON配列のみ としてください。「作成しました」などの挨拶、解説文、マークダウン記法(```json など)は一切含めないでください。\n各要素(1問分)は必ず以下のキーをすべて含めてください(キー名は厳守、余分なキーは追加しないこと):\n{\n  \"category_major\": \"大分類名(大分類の許容値一覧から選択)\",\n  \"category_middle\": \"中分類名(指定された中分類をそのまま使用)\",\n  \"question_type\": \"出題形式(指定された出題形式をそのまま使用)\",\n  \"keyword\": \"この問題の中心となるキーワード・用語(1つ)\",\n  \"test_name\": \"{{ $('Select Targets').first().json.exam_name }}\",\n  \"question\": \"問題文\",\n  \"option_a\": \"選択肢A\",\n  \"option_b\": \"選択肢B\",\n  \"option_c\": \"選択肢C\",\n  \"option_d\": \"選択肢D\",\n  \"answer\": \"正解の記号(A/B/C/Dのいずれか1文字)\",\n  \"explanation\": \"解説文\",\n  \"related_terms\": \"関連する用語(複数ある場合は「、」区切りの文字列)\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "=あなたは{{ $('Select Targets').first().json.exam_name }}試験のプロ問題作成者です。受講者が本質的な理解を深められる良質な問題と解説を作成してください。指定された出題形式(question_type)は絶対に守ってください。",
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        368,
+        624
+      ],
+      "id": "9c094f77-833d-4cdc-8c40-83e5613f5e3a",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function sanitizeJsonString(text) {\n  let result = '';\n  let inString = false;\n  let escaped = false;\n  for (let i = 0; i < text.length; i++) {\n    const ch = text[i];\n    if (inString) {\n      if (escaped) {\n        result += ch;\n        escaped = false;\n        continue;\n      }\n      if (ch === '\\\\') {\n        result += ch;\n        escaped = true;\n        continue;\n      }\n      if (ch === '\"') {\n        let j = i + 1;\n        while (j < text.length && /\\s/.test(text[j])) j++;\n        const nextCh = text[j];\n        if (nextCh === undefined || nextCh === ',' || nextCh === '}' || nextCh === ']' || nextCh === ':') {\n          result += ch;\n          inString = false;\n        } else {\n          result += '\\\\\"';\n        }\n        continue;\n      }\n      if (ch === '\\n') { result += '\\\\n'; continue; }\n      if (ch === '\\r') { result += '\\\\r'; continue; }\n      if (ch === '\\t') { result += '\\\\t'; continue; }\n      result += ch;\n    } else {\n      if (ch === '\"') {\n        inString = true;\n      }\n      result += ch;\n    }\n  }\n  return result;\n}\n\nfunction extractFirstJsonArray(text) {\n  const start = text.indexOf('[');\n  // 【修正部分】'[' が見つからない場合は明確なエラーを投げてリトライを誘発する\n  if (start === -1) {\n    throw new Error(\"AIの応答にJSON配列が含まれていません。出力形式の指示に従わなかった可能性があります。AIの生応答先頭: \" + text.slice(0, 50));\n  }\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n  for (let i = start; i < text.length; i++) {\n    const ch = text[i];\n    if (inString) {\n      if (escaped) { escaped = false; continue; }\n      if (ch === '\\\\') { escaped = true; continue; }\n      if (ch === '\"') { inString = false; continue; }\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '[') depth++;\n    if (ch === ']') {\n      depth--;\n      if (depth === 0) {\n        return text.slice(start, i + 1);\n      }\n    }\n  }\n  return text.slice(start);\n}\n\nfunction repairDirtyJson(text) {\n  let cleaned = text.replace(/\\r?\\n/g, \" \");\n  cleaned = cleaned.replace(/\"(option_[a-d]|question|keyword|category_major|category_middle|question_type|test_name|answer|explanation)\"\\s*,/g, '\"$1\": \"\",');\n  return cleaned;\n}\n\nfunction safeJsonParse(cleaned, errorPrefix) {\n  try {\n    return JSON.parse(cleaned);\n  } catch (e1) {\n    const sanitized = sanitizeJsonString(cleaned);\n    try {\n      return JSON.parse(sanitized);\n    } catch (e2) {\n      const repaired = repairDirtyJson(sanitized);\n      try {\n        return JSON.parse(repaired);\n      } catch (e3) {\n        throw new Error(errorPrefix + ': ' + e2.message);\n      }\n    }\n  }\n}\n\nconst item = $input.first().json;\nconst partsArray = item?.content?.parts ?? item?.candidates?.[0]?.content?.parts ?? null;\nconst raw = Array.isArray(partsArray) && partsArray.length > 0\n  ? partsArray.map(p => (p && typeof p.text === 'string') ? p.text : '').join('')\n  : (item.text ?? item.content ?? '');\n\nlet cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();\ncleaned = extractFirstJsonArray(cleaned);\nconst questions = safeJsonParse(cleaned, 'JSONパースに失敗しました');\n\nreturn [{ json: { questions } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        624
+      ],
+      "id": "0f30904b-19ba-4948-96b7-96bfbc2bd055",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.5-flash-lite",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.5-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=以下に入力された5問の模擬問題データ(JSON配列。配列の並び順がそのままindex 0〜4に対応)を査読してください。\n\n【シラバス中分類リスト】\n{{ $('Get row(s) in sheet1').all().map(item => item.json.category_middle).join('、') }}\n\n【シラバス大分類リスト】\n{{ $('Get row(s) in sheet1').all().map(item => item.json.category_major).filter((v, i, a) => a.indexOf(v) === i).join('、') }}\n\n【各問題(index対応)に割り当てられていた出題形式】\n{{ $('Select Targets').first().json.targets.map((t, i) => `index ${i}: ${t.question_type}`).join('、') }}\n\n【査読チェックリスト】\n1. 正解の一義性と誤答の品質\n   - 指定の正解記号と解説の正解が完全に一致しているか。\n   - 正解が1つだけに絞られるか（他が正解になり得る曖昧さがないか）。\n   - 誤答選択肢（ダミー）は受験者が誤解しやすい適切な内容か。\n   - 正解・誤答ともに、解説が十分な根拠を示しているか。\n2. シラバス適合・難易度・用語統一\n   - 対象試験（{{ $('Select Targets').first().json.exam_name }}）の最新シラバス範囲内かつ求められる難易度レベルか（超過している場合は基礎概念を問う内容へ修正）。\n   - シラバスの公式用語に統一され、表記揺れがないか。\n3. 事実整合性と表現の汎用性（経年劣化対策）\n   - 専門知識や仕様・定義に事実誤認（ハルシネーション）がないか。\n   - 特定の製品名・バージョン名など陳腐化しやすい表現を避け、一般的・普遍的な用語（例：大規模言語モデル等）に置き換わっているか。\n4. 法令・コンプライアンス表現\n   - 法的に断定できないグレーゾーン（個別判断・行政指導レベル等）に対し、過剰な断定表現（「〜は違法」）をしていないか（「〜の可能性がある」等へ調整）。\n   - ただし、明確に法令で禁止されている事項まで曖昧にぼかす必要はない。\n5. 否定問（【】で強調された問題）の場合、正誤判定の論理が問いかけの向きと逆転していないか確認すること。\n\n【出力形式】\n- 修正が必要な問題の差分(パッチ)のみをJSON配列形式で出力してください。\n  形式: [{ \"index\": 0, \"changes\": { \"category_middle\": \"法務\" } }]\n- 修正不要な場合は空配列 [] を返してください。\n- 上記いずれの観点についても、修正が必要なindexとフィールドのみを changes として出力し、修正不要な問題については何も出力しないこと。\n\n【入力データ】\n{{ JSON.stringify($json.questions) }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "=あなたは{{ $('Select Targets').first().json.exam_name }}試験の出題傾向と難易度水準を熟知した、厳密な校正者・査読委員です。修正が必要な問題とキーのみを含む差分(パッチ)形式のJSONを出力してください。",
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        624
+      ],
+      "id": "66e5de29-a946-48f2-b60d-6ee04fbdd7b5",
+      "name": "Message a model1",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function sanitizeJsonString(text) {\n  let result = '';\n  let inString = false;\n  let escaped = false;\n  for (let i = 0; i < text.length; i++) {\n    const ch = text[i];\n    if (inString) {\n      if (escaped) {\n        result += ch;\n        escaped = false;\n        continue;\n      }\n      if (ch === '\\\\') {\n        result += ch;\n        escaped = true;\n        continue;\n      }\n      if (ch === '\"') {\n        let j = i + 1;\n        while (j < text.length && /\\s/.test(text[j])) j++;\n        const nextCh = text[j];\n        if (nextCh === undefined || nextCh === ',' || nextCh === '}' || nextCh === ']' || nextCh === ':') {\n          result += ch;\n          inString = false;\n        } else {\n          result += '\\\\\"';\n        }\n        continue;\n      }\n      if (ch === '\\n') { result += '\\\\n'; continue; }\n      if (ch === '\\r') { result += '\\\\r'; continue; }\n      if (ch === '\\t') { result += '\\\\t'; continue; }\n      result += ch;\n    } else {\n      if (ch === '\"') {\n        inString = true;\n      }\n      result += ch;\n    }\n  }\n  return result;\n}\n\nfunction extractFirstJsonArray(text) {\n  const start = text.indexOf('[');\n  if (start === -1) return text;\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n  for (let i = start; i < text.length; i++) {\n    const ch = text[i];\n    if (inString) {\n      if (escaped) { escaped = false; continue; }\n      if (ch === '\\\\') { escaped = true; continue; }\n      if (ch === '\"') { inString = false; continue; }\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '[') depth++;\n    if (ch === ']') {\n      depth--;\n      if (depth === 0) {\n        return text.slice(start, i + 1);\n      }\n    }\n  }\n  return text.slice(start);\n}\n\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst item = $input.first().json;\nconst partsArray = item?.content?.parts ?? item?.candidates?.[0]?.content?.parts ?? null;\nconst raw = Array.isArray(partsArray) && partsArray.length > 0\n  ? partsArray.map(p => (p && typeof p.text === 'string') ? p.text : '').join('')\n  : (item.text ?? item.content ?? '');\n\nlet cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();\ncleaned = extractFirstJsonArray(cleaned);\n\nlet patches = [];\ntry {\n  patches = JSON.parse(cleaned);\n} catch (e) {\n  try {\n    patches = JSON.parse(sanitizeJsonString(cleaned));\n  } catch (e2) {\n    patches = []; // 査読結果パース失敗時はフォールバックとしてパッチなしで続行\n  }\n}\n\nif (!Array.isArray(patches)) patches = [];\n\nconst originalQuestions = $('Code in JavaScript').first().json.questions;\nconst targets = $('Select Targets').first().json.targets;\nconst examName = $('Select Targets').first().json.exam_name;\n\nconst patchMap = new Map();\npatches.forEach(p => {\n  if (p && typeof p.index === 'number' && p.changes && typeof p.changes === 'object') {\n    patchMap.set(p.index, p.changes);\n  }\n});\n\nconst now = new Date().toISOString();\n\nconst finalItems = originalQuestions.map((q, i) => {\n  const changes = patchMap.get(i) || {};\n  const merged = { ...q, ...changes };\n\n    merged.test_name = examName;\n  if (targets[i]) {\n    merged.category_major = targets[i].category_major;\n    merged.category_middle = targets[i].category_middle;\n    merged.question_type = targets[i].question_type;\n  }\n\n  let relatedTerms = merged.related_terms;\n  if (Array.isArray(relatedTerms)) {\n    relatedTerms = relatedTerms.filter(Boolean).join('、');\n  } else if (relatedTerms == null) {\n    relatedTerms = '';\n  } else if (typeof relatedTerms !== 'string') {\n    relatedTerms = String(relatedTerms);\n  }\n\n  let answer = (merged.answer || '').toString().trim().toUpperCase();\n  const answerMatch = answer.match(/[A-D]/);\n  answer = answerMatch ? answerMatch[0] : answer.charAt(0);\n\n  return {\n    json: {\n      question_id: generateUUID(),\n      created_at: now,\n      ...merged,\n      related_terms: relatedTerms,\n      answer: answer,\n    }\n  };\n});\n\nreturn finalItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        624
+      ],
+      "id": "48708190-acff-4c62-929e-d762f4e3022c",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_QUESTION_DB_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "生成AIパスポート_問題DB",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=0](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=0)"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "question_id",
+              "displayName": "question_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "test_name",
+              "displayName": "test_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category_major",
+              "displayName": "category_major",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category_middle",
+              "displayName": "category_middle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "question_type",
+              "displayName": "question_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "question",
+              "displayName": "question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_a",
+              "displayName": "option_a",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_b",
+              "displayName": "option_b",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_c",
+              "displayName": "option_c",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_d",
+              "displayName": "option_d",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer",
+              "displayName": "answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "explanation",
+              "displayName": "explanation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "related_terms",
+              "displayName": "related_terms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_e",
+              "displayName": "option_e",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_be",
+              "displayName": "option_be",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "option_d_fixed",
+              "displayName": "option_d_fixed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyword_comparison",
+              "displayName": "keyword_comparison",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        656,
+        928
+      ],
+      "id": "8a00652f-707e-448d-9ac8-c93b34af6fe4",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst items = $input.all();\nconst appendedCount = items.length;\n\nstaticData.addedCount = (staticData.addedCount || 0) + appendedCount;\nstaticData.totalCount = (staticData.totalCount || 0) + appendedCount;\n\nif (!staticData.categoryCounts) staticData.categoryCounts = {};\nif (!staticData.questionTypeCounts) staticData.questionTypeCounts = {};\n\nitems.forEach(item => {\n  const key = item.json.category_middle;\n  const qType = item.json.question_type;\n  if (key) {\n    staticData.categoryCounts[key] = (staticData.categoryCounts[key] || 0) + 1;\n  }\n  if (qType) {\n    staticData.questionTypeCounts[qType] = (staticData.questionTypeCounts[qType] || 0) + 1;\n  }\n});\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        928
+      ],
+      "id": "f59b4885-4674-4d29-bb16-84689af022eb",
+      "name": "Update Added Counter"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_QUESTION_DB_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "生成AIパスポート_問題DB",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=0](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=0)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        160
+      ],
+      "id": "81df529b-02b5-4007-9a63-74e9d14f23c6",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SYLLABUS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "生成AIパスポート_シラバス",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SYLLABUS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SYLLABUS_SPREADSHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        0
+      ],
+      "id": "33a154e9-175d-4cdc-b3da-9d1d5da3ca60",
+      "name": "Get row(s) in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst syllabus = staticData.syllabus || [];\nconst countMap = staticData.categoryCounts || {};\nconst keywordCountMap = staticData.keywordCountMap || {};\nconst questionTypeCountMap = staticData.questionTypeCounts || {};\nconst totalCount = staticData.totalCount || 0;\n\nconst MAX_AVOID_KEYWORDS = 20;\n\nlet scored = syllabus.map(s => {\n  const actualCount = countMap[s.category_middle] || 0;\n  const actualRatio = totalCount > 0 ? actualCount / totalCount : 0;\n  const targetRatio = s.target_ratio;\n  const fulfillmentRatio = targetRatio > 0 ? actualRatio / targetRatio : 999;\n  return {\n    category_major: s.category_major,\n    category_middle: s.category_middle,\n    target_ratio: targetRatio,\n    actual_count: actualCount,\n    fulfillment_ratio: fulfillmentRatio,\n    _rand: Math.random(),\n  };\n});\nscored.sort((a, b) => a.fulfillment_ratio !== b.fulfillment_ratio ? a.fulfillment_ratio - b.fulfillment_ratio : a._rand - b._rand);\n\nconst questionTypeMaster = staticData.questionTypeMaster || [];\nconst BATCH_SIZE = Math.max(\n  0,\n  Math.min(5, syllabus.length, questionTypeMaster.length || 5)\n);\n\nconst syllabusTermsMap = {};\nsyllabus.forEach(s => {\n  const raw = s.syllabus_terms;\n  if (raw && String(raw).trim() !== '') {\n    syllabusTermsMap[s.category_middle] = String(raw)\n      .split(/[、,，]/)\n      .map(t => t.trim())\n      .filter(Boolean);\n  } else {\n    syllabusTermsMap[s.category_middle] = [];\n  }\n});\n\nlet targets = scored.slice(0, BATCH_SIZE).map(t => {\n  const catCounts = keywordCountMap[t.category_middle] || {};\n  const avoidKeywords = Object.keys(catCounts)\n    .sort((a, b) => catCounts[b] - catCounts[a])\n    .slice(0, MAX_AVOID_KEYWORDS);\n\n  const allTerms = syllabusTermsMap[t.category_middle] || [];\n  const usedSet = new Set(Object.keys(catCounts));\n  const remainingTerms = allTerms.filter(term => !usedSet.has(term));\n\n  let termMode;\n  let termCandidates;\n  if (allTerms.length === 0) {\n    termMode = 'no_list';\n    termCandidates = [];\n  } else if (remainingTerms.length > 0) {\n    termMode = 'has_list';\n    termCandidates = remainingTerms;\n  } else {\n    termMode = 'list_exhausted';\n    termCandidates = allTerms.slice().sort((a, b) => (catCounts[a] || 0) - (catCounts[b] || 0));\n  }\n\n  return {\n    ...t,\n    avoid_keywords: avoidKeywords,\n    term_mode: termMode,\n    term_candidates: termCandidates,\n  };\n});\n\nlet typeScored = questionTypeMaster.map(t => {\n  const actualCount = questionTypeCountMap[t.question_type] || 0;\n  const actualRatio = totalCount > 0 ? actualCount / totalCount : 0;\n  const targetRatio = t.target_ratio;\n  const fulfillmentRatio = targetRatio > 0 ? actualRatio / targetRatio : 999;\n  return {\n    question_type: t.question_type,\n    definition: t.definition,\n    target_ratio: targetRatio,\n    actual_count: actualCount,\n    fulfillment_ratio: fulfillmentRatio,\n    _rand: Math.random(),\n  };\n});\ntypeScored.sort((a, b) => a.fulfillment_ratio !== b.fulfillment_ratio ? a.fulfillment_ratio - b.fulfillment_ratio : a._rand - b._rand);\n\nlet selectedTypes = typeScored.slice(0, BATCH_SIZE);\nfor (let i = selectedTypes.length - 1; i > 0; i--) {\n  const j = Math.floor(Math.random() * (i + 1));\n  [selectedTypes[i], selectedTypes[j]] = [selectedTypes[j], selectedTypes[i]];\n}\n\ntargets = targets.map((t, i) => ({\n  ...t,\n  question_type: selectedTypes[i] ? selectedTypes[i].question_type : undefined,\n  question_type_definition: selectedTypes[i] ? selectedTypes[i].definition : undefined,\n}));\n\nconst questionTypeDefinitionsText = questionTypeMaster\n  .map(t => `- ${t.question_type}: ${t.definition}`)\n  .join('\\n');\nconst questionTypeAllowedListText = questionTypeMaster\n  .map(t => t.question_type)\n  .join('、');\n\nconst categoryMajorList = staticData.categoryMajorList || [];\nconst categoryMajorListText = categoryMajorList.join('、');\n\nconst targetListText = targets\n  .map((t, i) => {\n    let keywordGuideText;\n    if (t.term_mode === 'has_list') {\n      keywordGuideText = ` ｜ 未出題の用語候補(リストの先頭を優先): ${t.term_candidates.join('、')}`;\n    } else if (t.term_mode === 'list_exhausted') {\n      keywordGuideText = ` ｜ この分野は用語リストを一巡済みです。以下の中からリスト先頭の用語を優先して選んで出題すること: ${t.term_candidates.join('、')}`;\n    } else {\n      keywordGuideText = t.avoid_keywords.length > 0\n        ? ` ｜ 既出キーワード(使用禁止): ${t.avoid_keywords.join('、')}`\n        : '';\n    }\n    return `${i + 1}問目: 大分類「${t.category_major}」 / 中分類「${t.category_middle}」 / 出題形式「${t.question_type}」${keywordGuideText}`;\n  })\n  .join('\\n');\n\nconst addedCount = staticData.addedCount || 0;\nconst examName = staticData.qualificationName || '';\n\n// 【追加】無限ループ対策:周回するたびにカウントアップし、上限を超えたら強制終了させる\nstaticData.loopCount = (staticData.loopCount || 0) + 1;\nconst loopCount = staticData.loopCount;\nconst maxLoops = 30; // 1周5問想定なので30周=最大150問生成の安全弁\n\nreturn [{\n  json: {\n    targets,\n    target_list_text: targetListText,\n    question_type_definitions_text: questionTypeDefinitionsText,\n    question_type_allowed_list_text: questionTypeAllowedListText,\n    category_major_list_text: categoryMajorListText,\n    exam_name: examName,\n    added_count: addedCount,\n    target_new: 100,\n    loop_count: loopCount,\n    max_loops: maxLoops,\n    debug_info: { total_existing_questions: totalCount }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        640
+      ],
+      "id": "1d14d691-8543-4a9a-8fec-7f9fb4bbc6bd",
+      "name": "Select Targets"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        176,
+        384
+      ],
+      "id": "76d863ee-1339-4835-a1e5-8b8c4281bf81",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const syllabus = $('Get row(s) in sheet1').all().map(item => item.json);\nconst existingQuestions = $('Get row(s) in sheet').all().map(item => item.json);\n\nconst countMap = {};\nconst questionTypeCountMap = {};\nexistingQuestions.forEach(q => {\n  const key = q.category_middle;\n  countMap[key] = (countMap[key] || 0) + 1;\n  if (q.question_type) {\n    questionTypeCountMap[q.question_type] = (questionTypeCountMap[q.question_type] || 0) + 1;\n  }\n});\n\nconst categoryMajorList = [...new Set(syllabus.map(s => s.category_major).filter(Boolean))];\nconst qualificationNameRow = syllabus.find(s => s.qualification_name && String(s.qualification_name).trim() !== '');\nconst qualificationName = qualificationNameRow ? String(qualificationNameRow.qualification_name).trim() : '';\n\nconst staticData = $getWorkflowStaticData('global');\nstaticData.syllabus = syllabus;\nstaticData.categoryCounts = countMap;\nstaticData.questionTypeCounts = questionTypeCountMap;\nstaticData.totalCount = existingQuestions.length;\nstaticData.categoryMajorList = categoryMajorList;\nstaticData.qualificationName = qualificationName;\n\nconst keywordStatsRows = $('Get row(s) in sheet3').all().map(item => item.json);\nconst keywordCountMap = {};\nkeywordStatsRows.forEach(r => {\n  const cat = r.category_middle;\n  const kw = r.keyword;\n  if (!cat || !kw) return;\n  const cnt = parseInt(r.count, 10) || 0;\n  if (!keywordCountMap[cat]) keywordCountMap[cat] = {};\n  keywordCountMap[cat][kw] = cnt;\n});\nstaticData.keywordCountMap = keywordCountMap;\n\nstaticData.questionTypeMaster = $('Get row(s) in sheet2').all().map(item => ({\n  question_type: item.json.question_type,\n  target_ratio: parseFloat(item.json.target_ratio),\n  definition: item.json.definition,\n}));\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -288,
+        640
+      ],
+      "id": "bea383d6-803b-44e3-9617-0e7438dccb6a",
+      "name": "Init Static Data"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        640
+      ],
+      "id": "2ad2d389-ee9f-4db0-a3b9-c9d118c0c642",
+      "name": "Loop Start"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d31501ea-eaf9-4e14-a077-bd8095c51adb",
+              "leftValue": "={{ $json.added_count }}",
+              "rightValue": "={{ $json.target_new }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "f1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f6a7",
+              "leftValue": "={{ $json.loop_count }}",
+              "rightValue": "={{ $json.max_loops }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        192,
+        640
+      ],
+      "id": "d0a677af-6842-4732-a843-d6917024d3a8",
+      "name": "If"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        352,
+        832
+      ],
+      "id": "d98823a9-1e0f-4124-b08a-c0109061bba7",
+      "name": "Complete"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1424,
+        928
+      ],
+      "id": "a7f14dd5-19f6-4610-b493-f97187df55b2",
+      "name": "Wait1",
+      "webhookId": "10fbff61-7a2c-4d08-9356-6e299ed8e9eb"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_QUESTION_TYPE_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "模擬問題_出題形式",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_TYPE_SPREADSHEET_ID/edit?usp=drivesdk](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_TYPE_SPREADSHEET_ID/edit?usp=drivesdk)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_TYPE_SPREADSHEET_ID/edit#gid=0](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_TYPE_SPREADSHEET_ID/edit#gid=0)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        304
+      ],
+      "id": "df70834d-927f-4c16-8ecc-d9e95f8e58a6",
+      "name": "Get row(s) in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_QUESTION_DB_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "生成AIパスポート_問題DB",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 791310097,
+          "mode": "list",
+          "cachedResultName": "keyword_stats",
+          "cachedResultUrl": "[https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=791310097](https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=791310097)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        448
+      ],
+      "id": "730e01ca-eae9-4b2a-90e4-f2586dbe5ecb",
+      "name": "Get row(s) in sheet3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.keywordCountMap) staticData.keywordCountMap = {};\nconst items = $input.all();\n\nconst touched = new Map();\nitems.forEach(item => {\n  const cat = item.json.category_middle;\n  const kw = item.json.keyword;\n  if (!cat || !kw) return;\n  if (!staticData.keywordCountMap[cat]) staticData.keywordCountMap[cat] = {};\n  const newCount = (staticData.keywordCountMap[cat][kw] || 0) + 1;\n  staticData.keywordCountMap[cat][kw] = newCount;\n  touched.set(cat + '||' + kw, {\n    key: cat + '||' + kw,   // ← 追加:照合用の複合キー\n    category_middle: cat,\n    keyword: kw,\n    count: newCount\n  });\n});\n\nreturn Array.from(touched.values()).map(v => ({ json: v }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        928
+      ],
+      "id": "58bfe6ba-f178-446e-80ee-c17e6cc8acef",
+      "name": "Compute Keyword Stat Updates"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_QUESTION_DB_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "生成AIパスポート_問題DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 791310097,
+          "mode": "list",
+          "cachedResultName": "keyword_stats",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_QUESTION_DB_SPREADSHEET_ID/edit#gid=791310097"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "key"
+          ],
+          "schema": [
+            {
+              "id": "category_middle",
+              "displayName": "category_middle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "count",
+              "displayName": "count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        928
+      ],
+      "id": "64d3f249-1f13-4a1a-b135-44a8fe293d9e",
+      "name": "Update Keyword Stats",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 正規化用マスターリストを取得\nconst middleMaster = [...new Set($('Get row(s) in sheet1').all().map(i => i.json.category_middle))];\nconst majorMaster = [...new Set($('Get row(s) in sheet1').all().map(i => i.json.category_major))];\nconst typeMaster = [...new Set($('Get row(s) in sheet2').all().map(i => i.json.question_type))];\n\n// 全角半角スペース・記号を除去して比較しやすくする\nfunction normalize(str) {\n  return String(str || '')\n    .replace(/[　\\s]/g, '')\n    .replace(/[()（）・\\-]/g, '');\n}\n\n// 完全一致 → 正規化後一致 → 部分一致(片方がもう片方を含む)の順で候補を探す\nfunction resolveToMaster(value, masterList) {\n  if (!value) return { resolved: null, matched: false };\n  if (masterList.includes(value)) return { resolved: value, matched: true };\n\n  const normValue = normalize(value);\n  const exact = masterList.find(m => normalize(m) === normValue);\n  if (exact) return { resolved: exact, matched: true };\n\n  const partial = masterList.find(m => normalize(m).includes(normValue) || normValue.includes(normalize(m)));\n  if (partial) return { resolved: partial, matched: true };\n\n  return { resolved: value, matched: false }; // 一致なし:元の値を残しつつ要確認フラグを立てる\n}\n\nconst items = $input.all();\nreturn items.map(item => {\n  const q = { ...item.json };\n\n  const middleResult = resolveToMaster(q.category_middle, middleMaster);\n  const majorResult = resolveToMaster(q.category_major, majorMaster);\n  const typeResult = resolveToMaster(q.question_type, typeMaster);\n\n  q.category_middle = middleResult.resolved;\n  q.category_major = majorResult.resolved;\n  q.question_type = typeResult.resolved;\n\n  // どれか一致しなかった場合は要確認フラグを立てる(シート側に列を追加してもよい)\n  q._needs_category_review = !(middleResult.matched && majorResult.matched && typeResult.matched);\n\n  return { json: q };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        624
+      ],
+      "id": "1c32ba53-5ca3-41a9-96b1-6a8ebbf35dcc",
+      "name": "Code in JavaScript2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Init Counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Counter": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s) in sheet1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s) in sheet2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s) in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Update Added Counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Added Counter": {
+      "main": [
+        [
+          {
+            "node": "Compute Keyword Stat Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Targets": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Init Static Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Static Data": {
+      "main": [
+        [
+          {
+            "node": "Loop Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Start": {
+      "main": [
+        [
+          {
+            "node": "Select Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Loop Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet3": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Compute Keyword Stat Updates": {
+      "main": [
+        [
+          {
+            "node": "Update Keyword Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Keyword Stats": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "YOUR_VERSION_ID",
+  "meta": {
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "nodeGroups": [],
+  "id": "YOUR_WORKFLOW_ID",
+  "tags": []
+}
